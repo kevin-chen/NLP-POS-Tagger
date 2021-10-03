@@ -18,28 +18,22 @@ def updateTransitionTable(transition, prevPos, currPos):
     prevPosObject[currPos] = currPosCount
 
 def updateLikelihoodProbabilities(likelihood):
-    count = 0
     for pos in likelihood:
+        count = 0
         frequency = likelihood[pos]
         for freq in frequency:
             count += frequency[freq]
-    for pos in likelihood:
-        frequency = likelihood[pos]
         for freq in frequency:
-            probability = frequency[freq] / count
-            frequency[freq] = probability
+            frequency[freq] = float(frequency[freq]) / float(count)
 
 def updateTransitionProbabilities(transition):
-    count = 0
     for state in transition:
+        count = 0
         frequency = transition[state]
         for freq in frequency:
             count += frequency[freq]
-    for state in transition:
-        frequency = transition[state]
         for freq in frequency:
-            probability = frequency[freq] / count
-            frequency[freq] = probability
+            frequency[freq] = float(frequency[freq]) / float(count)
 
 def viterbi(tokens, likelihood, transition):
     # N = number of POS
@@ -124,6 +118,8 @@ def viterbi(tokens, likelihood, transition):
     # print(max_index, pos[max_index])
     # print(len(max_list))
     # arr[pos_index][word_index] = max(max_list)
+    
+    # print(maxArr)
 
     # Backtrack
     row, col = max_index, prev_column
@@ -150,7 +146,6 @@ def updatePriors(likelihood, transition, line, prevPos):
 
         # update the likelihood hashtable
         updateLikelihoodTable(likelihood, word, pos)
-
         # update the transition hashtable
         updateTransitionTable(transition, prevPos, pos)
         
@@ -166,21 +161,17 @@ def trainingData(trainingFile, transition, likelihood):
     while line != None:
         if len(line) == 0:
             break
-        
         prevPos = updatePriors(likelihood, transition, line, prevPos)
-
-        # read the next line in the file
         line = trainingFile.readline()
+
+    # print(likelihood)
+    # print("\n\n", transition)
 
     updateLikelihoodProbabilities(likelihood)
     updateTransitionProbabilities(transition)
 
-    maxPosArr = viterbi(["Ms.", "Haag", "plays", "Elianti", "."], likelihood, transition)
     # print(maxPosArr)
     # print(numpy.array(arr))
-
-def backtrackPrint(maxPosArr):
-    pass
 
 def main():
     likelihood = dict()
@@ -191,8 +182,9 @@ def main():
     trainingData(trainingFile, transition, likelihood)
     trainingFile.close()
 
-    # print(likelihood)
-    # print("\n", transition)
+    print("Likelihood", likelihood)
+    print("")
+    print("Transition", transition)
 
     # print(transition['Begin_Sent']['IN'])
 
