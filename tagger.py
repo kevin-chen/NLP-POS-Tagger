@@ -8,7 +8,6 @@ def updateLikelihoodTable(likelihood, word, pos):
     wordCount = posObject.get(word, 0) + 1
     posObject[word] = wordCount
 
-# take the previous POS and update the current POS by 1
 def updateTransitionTable(transition, prevPos, currPos):
     prevPosObject = transition.get(prevPos, None)
     if not prevPosObject:
@@ -123,14 +122,18 @@ def viterbi(tokens, likelihood, transition):
 
     # Backtrack
     row, col = max_index, prev_column
-    print(pos[max_index])
+    outputPOSSequence = []
+    # print(pos[max_index])
+    outputPOSSequence.insert(0, pos[max_index])
     while col > 0:
         maxPos = maxPosArr[row][col]
         row = maxPos[0][0]
         col = maxPos[0][1]
-        print(maxPos[1])
+        # print(maxPos[1])
+        outputPOSSequence.insert(0, maxPos[1])
 
-    return maxPosArr
+    # return maxPosArr
+    return outputPOSSequence
 
 def updatePriors(likelihood, transition, line, prevPos):
     line = line.strip()
@@ -163,30 +166,63 @@ def trainingData(trainingFile, transition, likelihood):
             break
         prevPos = updatePriors(likelihood, transition, line, prevPos)
         line = trainingFile.readline()
-
-    # print(likelihood)
-    # print("\n\n", transition)
-
+    
     updateLikelihoodProbabilities(likelihood)
     updateTransitionProbabilities(transition)
 
-    # print(maxPosArr)
-    # print(numpy.array(arr))
+def createSentences(developmentFile):
+    line = developmentFile.readline()
+    output = []
+    curr = []
+    while line != None: # line == "" denotes new sentence
+        if len(line) == 0:
+            break
+        line = line.strip()
+        if line == "":
+            output.append(curr)
+            curr = []
+        else:
+            curr.append(line)
+        line = developmentFile.readline()
+    return output
+
+def tagger(allSentences, transition, likelihood):
+    outputFile = open("RESULTS.pos", "w")
+    for sentence in allSentences:
+        pos_tagged = viterbi(sentence, likelihood, transition)
+        for word_index in range(len(sentence)):
+            try:
+                pos = pos_tagged[word_index]
+                word = sentence[word_index]
+                content = word + "\t" + pos + "\n"
+                outputFile.write(content)
+            except:
+                print(sentence, word_index)
+        outputFile.write("\n")
+    outputFile.close()
 
 def main():
     likelihood = dict()
     transition = dict()
 
-    # trainingFile = open("WSJ_POS_CORPUS_FOR_STUDENTS/WSJ_02-21.pos", "r")
-    trainingFile = open("WSJ_POS_CORPUS_FOR_STUDENTS/shorter.pos", "r")
+    trainingFile = open("WSJ_POS_CORPUS_FOR_STUDENTS/WSJ_02-21.pos", "r")
+    # trainingFile = open("WSJ_POS_CORPUS_FOR_STUDENTS/shorter.pos", "r")
     trainingData(trainingFile, transition, likelihood)
     trainingFile.close()
 
-    print("Likelihood", likelihood)
-    print("")
-    print("Transition", transition)
+    # maxPosArr = viterbi(["Ms.", "Haag", "plays", "Elianti", "."], likelihood, transition)
 
-    # print(transition['Begin_Sent']['IN'])
+    # print("Likelihood", likelihood)
+    # print("")
+    # print("Transition", transition)
+
+    developmentFile = open("WSJ_POS_CORPUS_FOR_STUDENTS/WSJ_24.words", "r")
+    # developmentFile = open("WSJ_POS_CORPUS_FOR_STUDENTS/shorter.words", "r")
+    allSentences = createSentences(developmentFile)
+    developmentFile.close()
+
+    tagger(allSentences, transition, likelihood)
+    # print(viterbi(allSentences[0], likelihood, transition))
 
 
 if __name__ == "__main__":
