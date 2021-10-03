@@ -1,3 +1,4 @@
+from os import stat
 import numpy
 import sys
 
@@ -17,23 +18,36 @@ def updateTransitionTable(transition, prevPos, currPos):
     currPosCount = prevPosObject.get(currPos, 0) + 1
     prevPosObject[currPos] = currPosCount
 
-def updateLikelihoodProbabilities(likelihood):
+def updateLikelihoodProbabilities(likelihood, partOfSpeech):
     for pos in likelihood:
-        count = 0
+        numPOSOccuringOnce = 0
+        numPOS = partOfSpeech[pos]
         frequency = likelihood[pos]
         for freq in frequency:
-            count += frequency[freq]
-        for freq in frequency:
-            frequency[freq] = float(frequency[freq]) / float(count)
+            if frequency[freq] == 1: numPOSOccuringOnce += 1
+            frequency[freq] = float(frequency[freq]) / float(numPOS)
+        # print(pos, float(numPOSOccuringOnce), float(numPOS))
+        if float(numPOSOccuringOnce) / float(numPOS) == 0:
+            likelihood[pos]["UNKNOWN_WORD"] = 0.001
+        else:
+            likelihood[pos]["UNKNOWN_WORD"] = float(numPOSOccuringOnce) / float(numPOS)
+        # print("Unknown Likelihood", likelihood[pos]["UNKNOWN_WORD"])
 
-def updateTransitionProbabilities(transition):
+def updateTransitionProbabilities(transition, transitionCount):
     for state in transition:
-        count = 0
+    # if state != "End_Sent":
+        numPrevPosOccuringOnce = 0
+        # print(state)
+        numPrevPos = transitionCount[state]
         frequency = transition[state]
         for freq in frequency:
-            count += frequency[freq]
-        for freq in frequency:
-            frequency[freq] = float(frequency[freq]) / float(count)
+            if frequency[freq] == 1: numPrevPosOccuringOnce += 1
+            frequency[freq] = float(frequency[freq]) / float(numPrevPos)
+        if float(numPrevPosOccuringOnce) / float(numPrevPos) == 0:
+            transition[state]["UNKNOWN_WORD"] = 0.001
+        else:
+            transition[state]["UNKNOWN_WORD"] = float(numPrevPosOccuringOnce) / float(numPrevPos)
+        # print("Unknown Transition", transition[state]["UNKNOWN_WORD"])
 
 def viterbi(tokens, likelihood, transition):
     N = len(likelihood) # number of POS
@@ -48,13 +62,14 @@ def viterbi(tokens, likelihood, transition):
         for pos_index in range(N): # loop through each part of speech/row
             p = pos[pos_index]
             if word_index == 0: # first word in sentence has previous max of 1
-                t = 1 / 1000
+                t = 1 / 1000 #  transition['Begin_Sent']["UNKNOWN_WORD"]
                 if p in transition['Begin_Sent']:
                     t = transition['Begin_Sent'][p]
-                l = 1 / 1000
+                l = 1 / 1000 # likelihood[p]["UNKNOWN_WORD"]
                 if word in likelihood[p]:
                     l = likelihood[p][word]
                 a = t * l
+                # print(a, t, l)
                 maxArr[pos_index][word_index] = a
             else:
                 prev_column = word_index - 1
@@ -64,12 +79,13 @@ def viterbi(tokens, likelihood, transition):
                     prev_probability = maxArr[prev_pos_index][prev_column]
                     
                     if prev_probability != 0:
-                        t = 1 / 1000
+                        t = 1 / 1000 #  transition[prev_pos]["UNKNOWN_WORD"]
                         if p in transition[prev_pos]:
                             t = transition[prev_pos][p]
-                        l = 1 / 1000
+                        l = 1 / 1000 # likelihood[p]["UNKNOWN_WORD"]
                         if word in likelihood[p]:
                             l = likelihood[p][word]
+                        # print(a, t, l)
                         a = prev_probability * t * l
                         max_list.append(a)
                     else:
@@ -85,7 +101,7 @@ def viterbi(tokens, likelihood, transition):
         prev_pos = pos[prev_pos_index]
         prev_probability = maxArr[prev_pos_index][prev_column]
         if prev_probability != 0:
-            t = 0
+            t = 1 / 1000 # transition[prev_pos]["UNKNOWN_WORD"]
             if 'End_Sent' in transition[prev_pos]:
                 t = transition[prev_pos]['End_Sent']
             a = prev_probability * t
@@ -108,7 +124,7 @@ def viterbi(tokens, likelihood, transition):
     return outputPOSSequence
 
 # given a word/line, update the likelihood of word being given POS and transition given previous POS
-def updatePriors(likelihood, transition, line, prevPos):
+def updatePriors(likelihood, transition, line, prevPos, transitionCount, partOfSpeech):
     line = line.strip()
     if line == "":
         updateTransitionTable(transition, prevPos, 'End_Sent')
@@ -117,12 +133,14 @@ def updatePriors(likelihood, transition, line, prevPos):
         parts = line.split("\t") # get the word and pos of line
         word = parts[0]
         pos = parts[1]
+        partOfSpeech[pos] = partOfSpeech.get(pos, 0) + 1
+        transitionCount[prevPos] = transitionCount.get(prevPos, 0) + 1
         updateLikelihoodTable(likelihood, word, pos) # update the likelihood hashtable
         updateTransitionTable(transition, prevPos, pos) # update the transition hashtable
         return pos
 
 # reads the entire training file and updates each table
-def trainingData(trainingFile, transition, likelihood):
+def trainingData(trainingFile, transition, likelihood, transitionCount, partOfSpeech):
     prevPos = "Begin_Sent"
     transition['Begin_Sent'] = dict()
     transition['End_Sent'] = dict()
@@ -130,11 +148,11 @@ def trainingData(trainingFile, transition, likelihood):
     while line != None:
         if len(line) == 0:
             break
-        prevPos = updatePriors(likelihood, transition, line, prevPos)
+        prevPos = updatePriors(likelihood, transition, line, prevPos, transitionCount, partOfSpeech)
         line = trainingFile.readline()
     # convert counts to probabilities
-    updateLikelihoodProbabilities(likelihood)
-    updateTransitionProbabilities(transition)
+    updateLikelihoodProbabilities(likelihood, partOfSpeech)
+    updateTransitionProbabilities(transition, transitionCount)
 
 # read the development file and array output sentence of array words 
 def createSentences(developmentFile):
@@ -175,9 +193,11 @@ def main(args):
 
     likelihood = dict()
     transition = dict()
+    transitionCount = dict()
+    partOfSpeech = dict()
 
     trainingFile = open(trainingName, "r")
-    trainingData(trainingFile, transition, likelihood)
+    trainingData(trainingFile, transition, likelihood, transitionCount, partOfSpeech)
     trainingFile.close()
 
     developmentFile = open(developmentName, "r")
